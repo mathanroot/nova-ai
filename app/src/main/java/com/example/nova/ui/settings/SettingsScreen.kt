@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -353,7 +354,7 @@ private fun SettingSwitchItem(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color(0xFF000000),
+                checkedThumbColor = Black,
                 checkedTrackColor = ElectricBlue,
                 uncheckedThumbColor = TextSecondary,
                 uncheckedTrackColor = SurfaceDark
@@ -366,7 +367,7 @@ private fun SettingSwitchItem(
 private fun SettingInfoItem(
     title: String,
     value: String,
-    valueColor: androidx.compose.ui.graphics.Color = TextSecondary
+    valueColor: Color = TextSecondary
 ) {
     Row(
         modifier = Modifier

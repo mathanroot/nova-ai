@@ -53,7 +53,8 @@ class AndroidWakeWordEngine @Inject constructor(
         if (!isInitialized || readSize <= 0) return false
 
         // 1. If Vosk keyword grammar spotter is available
-        voskKeywordRecognizer?.let { recognizer ->
+        val recognizer = voskKeywordRecognizer
+        if (recognizer != null) {
             try {
                 if (recognizer.acceptWaveForm(buffer, readSize)) {
                     val resultJson = recognizer.result
