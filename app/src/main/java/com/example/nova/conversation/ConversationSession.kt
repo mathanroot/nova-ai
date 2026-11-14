@@ -8,6 +8,7 @@ data class ConversationSession(
     var lastUserUtterance: String? = null,
     var lastAssistantResponse: String? = null,
     var pendingClarificationQuestion: String? = null,
+    var isAwaitingFollowUp: Boolean = false,
     val startedAtMs: Long = System.currentTimeMillis()
 ) {
     fun nextTurn(userText: String) {
@@ -17,6 +18,7 @@ data class ConversationSession(
 
     fun completeTurn(response: String, requiresFollowUp: Boolean, clarificationPrompt: String? = null) {
         lastAssistantResponse = response
+        isAwaitingFollowUp = requiresFollowUp
         pendingClarificationQuestion = clarificationPrompt
     }
 }

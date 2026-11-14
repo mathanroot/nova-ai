@@ -19,7 +19,7 @@ class ReminderAction @Inject constructor(
             val intent = Intent(Intent.ACTION_INSERT).apply {
                 data = CalendarContract.Events.CONTENT_URI
                 putExtra(CalendarContract.Events.TITLE, "Reminder: $text")
-                putExtra(CalendarContract.Events.DESCRIPTION, text)
+                putExtra(CalendarContract.Events.DESCRIPTION, timeHint?.let { "$text ($it)" } ?: text)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)

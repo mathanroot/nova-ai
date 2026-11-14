@@ -21,11 +21,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -99,7 +99,7 @@ fun SettingsScreen(
             ) {
                 IconButton(onClick = onBack) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = TextWhite
                     )
@@ -131,12 +131,12 @@ fun SettingsScreen(
                                 wakeWordEnabled = it
                             }
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         SettingInfoItem(
                             title = "Wake Phrase",
                             value = "Hey Nova"
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         SettingSwitchItem(
                             title = "Follow-Up Conversation",
                             subtitle = "Keep listening after speaking response",
@@ -146,12 +146,12 @@ fun SettingsScreen(
                                 conversationManager.updateConfig(config.copy(isContinuousConversationEnabled = it))
                             }
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         SettingInfoItem(
                             title = "Follow-Up Timeout",
                             value = "${config.followUpTimeoutSeconds} seconds"
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         SettingSwitchItem(
                             title = "Activation Spoken Response",
                             subtitle = "Say 'Yes?' when wake phrase is recognized",
@@ -179,13 +179,13 @@ fun SettingsScreen(
                             },
                             valueColor = if (modelStatus == ModelStatus.READY) CyanNova else GlowAmber
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         SettingInfoItem(
                             title = "Wake-Word Engine",
                             value = if (isWakeWordActive) "Active (Screen-off enabled)" else "Idle",
                             valueColor = if (isWakeWordActive) CyanNova else TextSecondary
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         SettingActionItem(
                             title = "Test Voice Response",
                             subtitle = "Tap to verify local TextToSpeech playback",
@@ -204,22 +204,22 @@ fun SettingsScreen(
                             title = "Microphone",
                             granted = permissionManager.hasRecordAudioPermission()
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         PermissionStatusItem(
                             title = "Contacts",
                             granted = permissionManager.hasContactsPermission()
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         PermissionStatusItem(
                             title = "Phone & Calling",
                             granted = permissionManager.hasPhonePermission()
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         PermissionStatusItem(
                             title = "SMS",
                             granted = permissionManager.hasSmsPermission()
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         PermissionStatusItem(
                             title = "Notifications",
                             granted = permissionManager.hasNotificationPermission()
@@ -248,7 +248,7 @@ fun SettingsScreen(
                                 }
                             }
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         SettingActionItem(
                             title = "Battery Optimization",
                             subtitle = "Disable battery restrictions for screen-off listening",
@@ -266,7 +266,7 @@ fun SettingsScreen(
                                 }
                             }
                         )
-                        Divider(color = SurfaceDark, thickness = 1.dp)
+                        HorizontalDivider(color = SurfaceDark, thickness = 1.dp)
                         SettingInfoItem(
                             title = "App Version",
                             value = "1.0.0 (Release Debug)"
