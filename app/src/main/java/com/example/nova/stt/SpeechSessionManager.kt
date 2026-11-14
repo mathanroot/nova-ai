@@ -23,8 +23,10 @@ import javax.inject.Singleton
 @Singleton
 class SpeechSessionManager @Inject constructor(
     private val microphoneManager: MicrophoneManager,
-    private val speechRecognizer: VoskSpeechRecognizer,
-    private val audioLevelMonitor: AudioLevelMonitor
+    private val voskSpeechRecognizer: VoskSpeechRecognizer,
+    private val androidSpeechRecognizer: AndroidSpeechRecognizer,
+    private val audioLevelMonitor: AudioLevelMonitor,
+    private val modelManager: ModelManager
 ) {
     private val tag = "SpeechSessionManager"
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -33,6 +35,7 @@ class SpeechSessionManager @Inject constructor(
     private val vad = VoiceActivityDetector(speechConfig.speechEnergyThresholdDb)
     private val utteranceManager = UtteranceManager(speechConfig)
 
+    private var activeRecognizer: SpeechRecognizer = voskSpeechRecognizer
     private var audioRecorder: AudioRecorder? = null
     private var silenceMonitorJob: Job? = null
     private var recognitionCollectorJob: Job? = null
@@ -51,7 +54,7 @@ class SpeechSessionManager @Inject constructor(
 
         val ownershipGranted = microphoneManager.requestOwnership(MicrophoneOwner.VOSK_RECOGNITION)
         if (!ownershipGranted) {
-            Log.e(tag, "Failed to obtain microphone ownership for Vosk recognition")
+            Log.e(tag, "Failed to obtain microphone ownership for recognition")
             return false
         }
 
@@ -60,9 +63,27 @@ class SpeechSessionManager @Inject constructor(
         _liveTranscription.value = ""
         _isUserPaused.value = false
 
-        val recognizerReady = speechRecognizer.startListening()
+        // Select best available offline recognizer
+        var recognizerReady = false
+        if (modelManager.isModelReady()) {
+            recognizerReady = voskSpeechRecognizer.startListening()
+            if (recognizerReady) {
+                activeRecognizer = voskSpeechRecognizer
+                Log.d(tag, "Using Vosk Speech Recognizer")
+            }
+        }
+
         if (!recognizerReady) {
-            Log.w(tag, "Speech recognizer failed to start. Release mic.")
+            Log.d(tag, "Vosk model not loaded; using on-device Android SpeechRecognizer")
+            recognizerReady = androidSpeechRecognizer.startListening()
+            if (recognizerReady) {
+                activeRecognizer = androidSpeechRecognizer
+                Log.d(tag, "Using Android On-Device Speech Recognizer")
+            }
+        }
+
+        if (!recognizerReady) {
+            Log.w(tag, "Neither recognizer could start. Releasing mic ownership.")
             microphoneManager.releaseOwnership(MicrophoneOwner.VOSK_RECOGNITION)
             return false
         }
@@ -73,26 +94,28 @@ class SpeechSessionManager @Inject constructor(
 
         val recordSuccess = recorder.start(scope) { buffer, readSize ->
             vad.processFrame(buffer, readSize)
-            speechRecognizer.feedAudio(buffer, readSize)
+            if (activeRecognizer == voskSpeechRecognizer) {
+                activeRecognizer.feedAudio(buffer, readSize)
+            }
         }
 
-        if (!recordSuccess) {
+        if (!recordSuccess && activeRecognizer == voskSpeechRecognizer) {
             Log.e(tag, "Failed to start AudioRecorder")
-            speechRecognizer.stopListening()
+            activeRecognizer.stopListening()
             microphoneManager.releaseOwnership(MicrophoneOwner.VOSK_RECOGNITION)
             return false
         }
 
         startRecognitionCollector()
         startSilenceMonitoring()
-        Log.d(tag, "Listening session started successfully")
+        Log.d(tag, "Listening session started successfully with ${activeRecognizer::class.simpleName}")
         return true
     }
 
     private fun startRecognitionCollector() {
         recognitionCollectorJob?.cancel()
         recognitionCollectorJob = scope.launch {
-            speechRecognizer.speechResults.collect { result ->
+            activeRecognizer.speechResults.collect { result ->
                 when (result) {
                     is SpeechResult.Partial -> {
                         val currentText = utteranceManager.onPartialResult(result.text)
@@ -104,10 +127,14 @@ class SpeechSessionManager @Inject constructor(
                         _liveTranscription.value = utteranceManager.getFullTranscript()
                     }
                     is SpeechResult.Error -> {
-                        Log.e(tag, "SpeechResult error: ${result.error}")
+                        Log.w(tag, "SpeechResult error: ${result.error}")
                     }
                     is SpeechResult.EndOfUtterance -> {
-                        // Handled by silence monitor / finalization
+                        val finalSentence = utteranceManager.finalizeUtterance()
+                        if (finalSentence.isNotBlank()) {
+                            _liveTranscription.value = finalSentence
+                            _utteranceCompleted.emit(finalSentence)
+                        }
                     }
                     SpeechResult.Empty -> Unit
                 }
@@ -118,8 +145,8 @@ class SpeechSessionManager @Inject constructor(
     private fun startSilenceMonitoring() {
         silenceMonitorJob?.cancel()
         silenceMonitorJob = scope.launch {
-            while (isActive && audioRecorder?.isRecordingActive() == true) {
-                delay(100) // Check every 100ms
+            while (isActive && isListening()) {
+                delay(100)
                 val silenceMs = vad.getSilenceDurationMs()
                 val totalSpeechMs = vad.getTotalSpeechDurationMs()
 
@@ -153,7 +180,7 @@ class SpeechSessionManager @Inject constructor(
         audioRecorder?.stopAndRelease()
         audioRecorder = null
 
-        speechRecognizer.stopListening()
+        activeRecognizer.stopListening()
         microphoneManager.releaseOwnership(MicrophoneOwner.VOSK_RECOGNITION)
 
         val finalUtterance = utteranceManager.finalizeUtterance()
@@ -170,7 +197,7 @@ class SpeechSessionManager @Inject constructor(
 
         audioRecorder?.stopAndRelease()
         audioRecorder = null
-        speechRecognizer.cancel()
+        activeRecognizer.cancel()
         scope.launch {
             microphoneManager.releaseOwnership(MicrophoneOwner.VOSK_RECOGNITION)
         }
@@ -180,5 +207,5 @@ class SpeechSessionManager @Inject constructor(
         _isUserPaused.value = false
     }
 
-    fun isListening(): Boolean = audioRecorder?.isRecordingActive() == true
+    fun isListening(): Boolean = audioRecorder?.isRecordingActive() == true || activeRecognizer.isListening()
 }

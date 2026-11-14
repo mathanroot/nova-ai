@@ -78,7 +78,10 @@ class ConversationManager @Inject constructor(
             stateMachine.transitionTo(AssistantState.Listening)
             val started = speechSessionManager.startListeningSession()
             if (!started) {
-                Log.e(tag, "Failed to start speech session. Falling back to idle.")
+                Log.e(tag, "Failed to start speech session. Informing user.")
+                stateMachine.transitionTo(AssistantState.Error("Microphone unavailable"))
+                ttsManager.speak("Microphone is unavailable. Please grant microphone permission.")
+                delay(2000)
                 endConversation()
                 return@launch
             }

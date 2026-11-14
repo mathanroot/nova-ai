@@ -27,7 +27,7 @@ class AssistantCoordinator @Inject constructor(
 
     fun startManualListening() {
         Log.d(tag, "AssistantCoordinator: manual listening requested")
-        conversationManager.beginListeningTurn()
+        conversationManager.startConversationFromWakeWord()
     }
 
     fun stopOrCancel() {

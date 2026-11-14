@@ -5,13 +5,20 @@ import android.media.AudioAttributes
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import android.speech.tts.Voice
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
+
+data class PendingSpeech(
+    val text: String,
+    val utteranceId: String,
+    val onStart: () -> Unit,
+    val onDone: () -> Unit,
+    val onError: (String) -> Unit
+)
 
 @Singleton
 class AndroidTtsEngine @Inject constructor(
@@ -20,8 +27,10 @@ class AndroidTtsEngine @Inject constructor(
 
     private val tag = "AndroidTtsEngine"
     private var tts: TextToSpeech? = null
-    private var isInitialized = AtomicBoolean(false)
-    private var initCallback: ((Boolean) -> Unit)? = null
+    private val isInitialized = AtomicBoolean(false)
+    private val isInitializing = AtomicBoolean(false)
+    private val initCallbacks = mutableListOf<(Boolean) -> Unit>()
+    private val pendingQueue = mutableListOf<PendingSpeech>()
 
     private var activeOnStart: (() -> Unit)? = null
     private var activeOnDone: (() -> Unit)? = null
@@ -32,76 +41,92 @@ class AndroidTtsEngine @Inject constructor(
             onReady(true)
             return
         }
-        initCallback = onReady
-        tts = TextToSpeech(context, this)
+
+        synchronized(initCallbacks) {
+            initCallbacks.add(onReady)
+        }
+
+        if (isInitializing.compareAndSet(false, true)) {
+            Log.d(tag, "Instantiating TextToSpeech...")
+            tts = TextToSpeech(context.applicationContext, this)
+        }
     }
 
     override fun onInit(status: Int) {
+        isInitializing.set(false)
         if (status == TextToSpeech.SUCCESS) {
             val ttsInstance = tts ?: return
+
             val langResult = ttsInstance.setLanguage(Locale.US)
             if (langResult == TextToSpeech.LANG_MISSING_DATA || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.w(tag, "English US is not supported or missing data in TTS engine")
+                Log.w(tag, "Locale.US missing data, falling back to default device locale")
+                ttsInstance.setLanguage(Locale.getDefault())
             }
 
-            // Prefer high-quality offline voices
             try {
-                val voices = ttsInstance.voices
-                val offlineVoice = voices?.firstOrNull { voice ->
-                    voice.locale.language == "en" &&
-                            !voice.features.contains(TextToSpeech.Engine.KEY_FEATURE_NETWORK_SYNTHESIS)
-                }
-                if (offlineVoice != null) {
-                    ttsInstance.voice = offlineVoice
-                    Log.d(tag, "Selected offline TTS voice: ${offlineVoice.name}")
-                }
+                val audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                ttsInstance.setAudioAttributes(audioAttributes)
             } catch (e: Exception) {
-                Log.w(tag, "Could not set custom voice", e)
+                Log.w(tag, "Failed to set audio attributes on TTS", e)
             }
 
-            // Set AudioAttributes for Assistant
-            val audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANT)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-            ttsInstance.setAudioAttributes(audioAttributes)
-
-            ttsInstance.setSpeechRate(1.05f)
+            ttsInstance.setSpeechRate(1.0f)
             ttsInstance.setPitch(1.0f)
 
             setupProgressListener(ttsInstance)
             isInitialized.set(true)
-            Log.d(tag, "TTS initialized successfully")
-            initCallback?.invoke(true)
+            Log.d(tag, "TTS initialized and ready for playback!")
+
+            synchronized(initCallbacks) {
+                initCallbacks.forEach { it.invoke(true) }
+                initCallbacks.clear()
+            }
+
+            // Flush any pending speeches
+            synchronized(pendingQueue) {
+                while (pendingQueue.isNotEmpty()) {
+                    val req = pendingQueue.removeAt(0)
+                    speak(req.text, req.utteranceId, req.onStart, req.onDone, req.onError)
+                }
+            }
         } else {
             Log.e(tag, "Failed to initialize TextToSpeech (status: $status)")
             isInitialized.set(false)
-            initCallback?.invoke(false)
+            synchronized(initCallbacks) {
+                initCallbacks.forEach { it.invoke(false) }
+                initCallbacks.clear()
+            }
+            synchronized(pendingQueue) {
+                pendingQueue.forEach { it.onError("TTS initialization failed with code: $status") }
+                pendingQueue.clear()
+            }
         }
-        initCallback = null
     }
 
     private fun setupProgressListener(ttsInstance: TextToSpeech) {
         ttsInstance.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
-                Log.d(tag, "TTS started speaking utterance: $utteranceId")
+                Log.d(tag, "TTS started speaking: $utteranceId")
                 activeOnStart?.invoke()
             }
 
             override fun onDone(utteranceId: String?) {
-                Log.d(tag, "TTS finished speaking utterance: $utteranceId")
+                Log.d(tag, "TTS finished speaking: $utteranceId")
                 activeOnDone?.invoke()
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                Log.e(tag, "TTS error on utterance: $utteranceId")
+                Log.e(tag, "TTS error on: $utteranceId")
                 activeOnError?.invoke("TTS playback error")
             }
 
             override fun onError(utteranceId: String?, errorCode: Int) {
-                Log.e(tag, "TTS error $errorCode on utterance: $utteranceId")
-                activeOnError?.invoke("TTS error code: $errorCode")
+                Log.e(tag, "TTS error $errorCode on: $utteranceId")
+                activeOnError?.invoke("TTS error: $errorCode")
             }
         })
     }
@@ -113,13 +138,20 @@ class AndroidTtsEngine @Inject constructor(
         onDone: () -> Unit,
         onError: (String) -> Unit
     ) {
+        if (text.isBlank()) {
+            onDone()
+            return
+        }
+
         val ttsInstance = tts
         if (ttsInstance == null || !isInitialized.get()) {
+            Log.d(tag, "TTS not ready yet; queuing request: '$text'")
+            synchronized(pendingQueue) {
+                pendingQueue.add(PendingSpeech(text, utteranceId, onStart, onDone, onError))
+            }
             initTts { ready ->
-                if (ready) {
-                    speak(text, utteranceId, onStart, onDone, onError)
-                } else {
-                    onError("TTS is not initialized")
+                if (!ready) {
+                    onError("TTS could not be initialized")
                 }
             }
             return
@@ -133,10 +165,11 @@ class AndroidTtsEngine @Inject constructor(
             putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
         }
 
+        Log.d(tag, "Speaking text: '$text' (id: $utteranceId)")
         val result = ttsInstance.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
         if (result != TextToSpeech.SUCCESS) {
-            Log.e(tag, "ttsInstance.speak failed with code: $result")
-            onError("TTS speak failed with code: $result")
+            Log.e(tag, "tts.speak returned error code: $result")
+            onError("TTS speak error code: $result")
         }
     }
 
@@ -157,6 +190,7 @@ class AndroidTtsEngine @Inject constructor(
         } finally {
             tts = null
             isInitialized.set(false)
+            isInitializing.set(false)
         }
     }
 

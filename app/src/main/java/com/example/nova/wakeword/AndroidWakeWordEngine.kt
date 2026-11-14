@@ -20,19 +20,21 @@ class AndroidWakeWordEngine @Inject constructor(
     private var isInitialized = false
     private var voskKeywordRecognizer: Recognizer? = null
 
-    // Acoustic sliding buffer for backup acoustic pattern detection
-    private val energyBuffer = FloatArray(40)
-    private var bufferIndex = 0
+    // Sliding ring buffer tracking recent frame energies (approx 2.5 seconds at ~64ms per frame)
+    private val energyHistory = FloatArray(40)
+    private var historyIndex = 0
+    private var totalFramesProcessed = 0L
+
+    // Debounce to prevent immediate double-triggers
+    private var lastTriggerFrame = -100L
 
     override fun initEngine(): Boolean {
         try {
-            // Attempt to initialize Vosk grammar recognizer for "hey nova" if model is ready
             if (modelManager.isModelReady()) {
                 val model = modelManager.modelDirectory
                 if (model.exists()) {
                     try {
                         val voskModel = org.vosk.Model(model.absolutePath)
-                        // Grammar restricted strictly to "hey nova"
                         voskKeywordRecognizer = Recognizer(voskModel, 16000.0f, "[\"hey nova\", \"[unk]\"]")
                         Log.d(tag, "Vosk Keyword Recognizer initialized for 'Hey Nova'")
                     } catch (e: Exception) {
@@ -44,7 +46,7 @@ class AndroidWakeWordEngine @Inject constructor(
             return true
         } catch (e: Exception) {
             Log.e(tag, "Error initializing wake word engine", e)
-            isInitialized = true // Still allow acoustic detector
+            isInitialized = true
             return true
         }
     }
@@ -52,7 +54,9 @@ class AndroidWakeWordEngine @Inject constructor(
     override fun processAudioFrame(buffer: ShortArray, readSize: Int): Boolean {
         if (!isInitialized || readSize <= 0) return false
 
-        // 1. If Vosk keyword grammar spotter is available
+        totalFramesProcessed++
+
+        // 1. If Vosk keyword grammar recognizer is active, check its output
         val recognizer = voskKeywordRecognizer
         if (recognizer != null) {
             try {
@@ -76,20 +80,89 @@ class AndroidWakeWordEngine @Inject constructor(
             }
         }
 
-        // 2. Sliding acoustic energy analysis for phonetic envelope of "Hey" (burst) + "No-va" (two syllables)
+        // 2. Real-time acoustic energy & syllable cadence detector for "Hey Nova"
         var sumEnergy = 0.0f
-        var zeroCrossings = 0
         for (i in 0 until readSize) {
-            val sample = buffer[i]
-            sumEnergy += abs(sample.toInt())
-            if (i > 0 && ((buffer[i].toInt() xor buffer[i - 1].toInt()) < 0)) {
-                zeroCrossings++
+            sumEnergy += abs(buffer[i].toInt())
+        }
+        val avgEnergy = sumEnergy / readSize
+
+        val index = (historyIndex % energyHistory.size)
+        energyHistory[index] = avgEnergy
+        historyIndex++
+
+        // Prevent triggers within 30 frames (~2 seconds) of previous trigger
+        if (totalFramesProcessed - lastTriggerFrame < 30) {
+            return false
+        }
+
+        // Check for "Hey Nova" cadence:
+        // [Silence/Low] -> [Syllable 1: "Hey"] -> [Dip] -> [Syllable 2 & 3: "No-va"]
+        val detected = checkCadencePattern()
+        if (detected) {
+            Log.d(tag, "Acoustic pattern matched 'Hey Nova' cadence!")
+            lastTriggerFrame = totalFramesProcessed
+            reset()
+            return true
+        }
+
+        return false
+    }
+
+    private fun checkCadencePattern(): Boolean {
+        val size = energyHistory.size
+        val currentIdx = historyIndex
+
+        // Thresholds in linear 16-bit PCM amplitude
+        val speechThreshold = 1800f
+        val silenceThreshold = 900f
+
+        // Analyze last 22 frames (~1.4 seconds)
+        var speechBursts = 0
+        var inBurst = false
+        var burstLength = 0
+        var valleyLength = 0
+        val burstLengths = mutableListOf<Int>()
+
+        for (offset in 21 downTo 0) {
+            val i = (currentIdx - offset + size * 10) % size
+            val e = energyHistory[i]
+
+            if (e > speechThreshold) {
+                if (!inBurst) {
+                    inBurst = true
+                    speechBursts++
+                    if (valleyLength > 0) {
+                        valleyLength = 0
+                    }
+                }
+                burstLength++
+            } else {
+                if (inBurst) {
+                    inBurst = false
+                    burstLengths.add(burstLength)
+                    burstLength = 0
+                }
+                if (e < silenceThreshold) {
+                    valleyLength++
+                }
             }
         }
 
-        val avgEnergy = sumEnergy / readSize
-        energyBuffer[bufferIndex % energyBuffer.size] = avgEnergy
-        bufferIndex++
+        if (inBurst) {
+            burstLengths.add(burstLength)
+        }
+
+        // "Hey Nova" typically exhibits 2 distinct speech bursts:
+        // Burst 1: "Hey" (~2-8 frames)
+        // Burst 2: "Nova" (~3-12 frames)
+        if (burstLengths.size == 2) {
+            val heyLen = burstLengths[0]
+            val novaLen = burstLengths[1]
+            if (heyLen in 2..8 && novaLen in 3..12) {
+                return true
+            }
+        }
 
         return false
     }
@@ -105,8 +178,7 @@ class AndroidWakeWordEngine @Inject constructor(
     }
 
     override fun reset() {
-        bufferIndex = 0
-        energyBuffer.fill(0f)
+        energyHistory.fill(0f)
         voskKeywordRecognizer?.reset()
     }
 

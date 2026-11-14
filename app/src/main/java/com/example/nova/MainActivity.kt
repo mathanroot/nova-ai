@@ -114,6 +114,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (permissionManager.hasRecordAudioPermission()) {
+            WakeWordForegroundService.startService(this)
+        }
+    }
+
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
