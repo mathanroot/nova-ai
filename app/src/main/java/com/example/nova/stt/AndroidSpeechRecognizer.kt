@@ -9,6 +9,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer as SysSpeechRecognizer
 import android.util.Log
+import com.example.nova.audio.AudioLevelMonitor
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +24,8 @@ import javax.inject.Singleton
 
 @Singleton
 class AndroidSpeechRecognizer @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val audioLevelMonitor: AudioLevelMonitor
 ) : SpeechRecognizer {
 
     private val tag = "AndroidSpeechRecognizer"
@@ -54,7 +56,7 @@ class AndroidSpeechRecognizer @Inject constructor(
     private fun initAndStartSystemRecognizer() {
         try {
             speechRecognizer?.destroy()
-            speechRecognizer = SysSpeechRecognizer.createSpeechRecognizer(context).apply {
+            speechRecognizer = SysSpeechRecognizer.createSpeechRecognizer(context.applicationContext).apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         Log.d(tag, "System SpeechRecognizer ready for speech")
@@ -64,21 +66,32 @@ class AndroidSpeechRecognizer @Inject constructor(
                         Log.d(tag, "System SpeechRecognizer: speech started")
                     }
 
-                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onRmsChanged(rmsdB: Float) {
+                        val normalized = ((rmsdB + 2f) / 10f).coerceIn(0f, 1f)
+                        audioLevelMonitor.setDirectLevel(normalized)
+                    }
 
                     override fun onBufferReceived(buffer: ByteArray?) {}
 
                     override fun onEndOfSpeech() {
                         Log.d(tag, "System SpeechRecognizer: end of speech")
+                        audioLevelMonitor.reset()
                         scope.launch {
                             _speechResults.emit(SpeechResult.EndOfUtterance)
                         }
                     }
 
                     override fun onError(error: Int) {
-                        Log.w(tag, "System SpeechRecognizer error: $error")
+                        Log.w(tag, "System SpeechRecognizer error code: $error")
+                        audioLevelMonitor.reset()
                         scope.launch {
-                            _speechResults.emit(SpeechResult.Error("Recognition error: $error"))
+                            if (error == SysSpeechRecognizer.ERROR_NO_MATCH ||
+                                error == SysSpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                            ) {
+                                _speechResults.emit(SpeechResult.EndOfUtterance)
+                            } else {
+                                _speechResults.emit(SpeechResult.Error("Recognition error: $error"))
+                            }
                         }
                     }
 
@@ -86,6 +99,7 @@ class AndroidSpeechRecognizer @Inject constructor(
                         val matches = results?.getStringArrayList(SysSpeechRecognizer.RESULTS_RECOGNITION)
                         val text = matches?.firstOrNull() ?: ""
                         Log.d(tag, "System SpeechRecognizer final result: '$text'")
+                        audioLevelMonitor.reset()
                         scope.launch {
                             if (text.isNotBlank()) {
                                 _speechResults.emit(SpeechResult.Final(text))
@@ -114,7 +128,6 @@ class AndroidSpeechRecognizer @Inject constructor(
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.US.toString())
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                // Prefer offline speech recognition if supported on device
                 putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             }
 

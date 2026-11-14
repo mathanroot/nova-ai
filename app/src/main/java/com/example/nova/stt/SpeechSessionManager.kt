@@ -88,22 +88,22 @@ class SpeechSessionManager @Inject constructor(
             return false
         }
 
-        val recorder = AudioRecorder(audioLevelMonitor)
-        audioRecorder = recorder
-        microphoneManager.attachRecorder(recorder)
+        if (activeRecognizer == voskSpeechRecognizer) {
+            val recorder = AudioRecorder(audioLevelMonitor)
+            audioRecorder = recorder
+            microphoneManager.attachRecorder(recorder)
 
-        val recordSuccess = recorder.start(scope) { buffer, readSize ->
-            vad.processFrame(buffer, readSize)
-            if (activeRecognizer == voskSpeechRecognizer) {
+            val recordSuccess = recorder.start(scope) { buffer, readSize ->
+                vad.processFrame(buffer, readSize)
                 activeRecognizer.feedAudio(buffer, readSize)
             }
-        }
 
-        if (!recordSuccess && activeRecognizer == voskSpeechRecognizer) {
-            Log.e(tag, "Failed to start AudioRecorder")
-            activeRecognizer.stopListening()
-            microphoneManager.releaseOwnership(MicrophoneOwner.VOSK_RECOGNITION)
-            return false
+            if (!recordSuccess) {
+                Log.e(tag, "Failed to start AudioRecorder")
+                activeRecognizer.stopListening()
+                microphoneManager.releaseOwnership(MicrophoneOwner.VOSK_RECOGNITION)
+                return false
+            }
         }
 
         startRecognitionCollector()
@@ -186,6 +186,21 @@ class SpeechSessionManager @Inject constructor(
         val finalUtterance = utteranceManager.finalizeUtterance()
         _isUserPaused.value = false
         return finalUtterance
+    }
+
+    fun forceFinalizeCurrentUtterance() {
+        val sentence = utteranceManager.finalizeUtterance()
+        if (sentence.isNotBlank()) {
+            _liveTranscription.value = sentence
+            scope.launch {
+                _utteranceCompleted.emit(sentence)
+                stopListeningSession()
+            }
+        } else {
+            scope.launch {
+                stopListeningSession()
+            }
+        }
     }
 
     fun cancelSession() {

@@ -52,8 +52,11 @@ object AudioModule {
 
     @Provides
     @Singleton
-    fun provideAndroidSpeechRecognizer(@ApplicationContext context: Context): com.example.nova.stt.AndroidSpeechRecognizer {
-        return com.example.nova.stt.AndroidSpeechRecognizer(context)
+    fun provideAndroidSpeechRecognizer(
+        @ApplicationContext context: Context,
+        audioLevelMonitor: AudioLevelMonitor
+    ): com.example.nova.stt.AndroidSpeechRecognizer {
+        return com.example.nova.stt.AndroidSpeechRecognizer(context, audioLevelMonitor)
     }
 
     @Provides

@@ -75,15 +75,6 @@ fun AssistantScreen(
             .fillMaxSize()
             .background(Color(0xFF07070A))
             .statusBarsPadding()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {
-                    if (state !is AssistantState.Idle) {
-                        viewModel.cancel()
-                    }
-                }
-            )
     ) {
         // 1. Siri-Style Edge Glow Ribbon (Illuminates full screen border on wake/speak)
         SiriEdgeGlow(

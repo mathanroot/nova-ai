@@ -51,6 +51,13 @@ class AudioLevelMonitor @Inject constructor() {
         _isSpeakingDetected.value = db > speechThresholdDb
     }
 
+    fun setDirectLevel(level: Float) {
+        val current = _normalizedLevel.value
+        val clamped = level.coerceIn(0.0f, 1.0f)
+        _normalizedLevel.value = current * 0.25f + clamped * 0.75f
+        _isSpeakingDetected.value = clamped > 0.12f
+    }
+
     fun reset() {
         _normalizedLevel.value = 0.0f
         _isSpeakingDetected.value = false

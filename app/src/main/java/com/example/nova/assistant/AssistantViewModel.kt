@@ -51,14 +51,14 @@ class AssistantViewModel @Inject constructor(
             is AssistantState.Listening,
             is AssistantState.SpeechPaused,
             is AssistantState.FollowUpListening -> {
-                assistantCoordinator.stopOrCancel()
+                speechSessionManager.forceFinalizeCurrentUtterance()
             }
             is AssistantState.Speaking -> {
                 ttsManager.stop()
-                assistantCoordinator.stopOrCancel()
+                assistantCoordinator.startManualListening()
             }
             else -> {
-                assistantCoordinator.stopOrCancel()
+                assistantCoordinator.startManualListening()
             }
         }
     }
