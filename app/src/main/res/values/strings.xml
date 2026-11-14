@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Nova</string>
+    <string name="wake_phrase">Hey Nova</string>
+    <string name="assistant_ready">Say "Hey Nova"</string>
+    <string name="assistant_listening">Listening…</string>
+    <string name="assistant_processing">Thinking…</string>
+    <string name="assistant_speaking">Speaking…</string>
+    <string name="foreground_service_notification_title">Nova Voice Assistant</string>
+    <string name="foreground_service_notification_desc">Nova is listening for "Hey Nova"</string>
+    <string name="voice_interaction_service_desc">Nova offline digital voice assistant</string>
+</resources>
