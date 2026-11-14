@@ -1,7 +1,8 @@
 <resources>
     <style name="Theme.Nova" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#FF000000</item>
-        <item name="android:navigationBarColor">#FF000000</item>
-        <item name="android:windowBackground">#FF000000</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#E607070A</item>
+        <item name="android:windowIsTranslucent">true</item>
     </style>
 </resources>

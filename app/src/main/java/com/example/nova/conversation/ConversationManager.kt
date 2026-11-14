@@ -3,6 +3,7 @@ package com.example.nova.conversation
 import android.util.Log
 import com.example.nova.assistant.AssistantState
 import com.example.nova.assistant.AssistantStateMachine
+import com.example.nova.audio.AudioCueManager
 import com.example.nova.nlu.AssistantIntent
 import com.example.nova.nlu.CommandExecutor
 import com.example.nova.nlu.IntentParser
@@ -30,7 +31,8 @@ class ConversationManager @Inject constructor(
     private val ttsManager: TtsManager,
     private val wakeWordManager: WakeWordManager,
     private val speechTurnManager: SpeechTurnManager,
-    private val followUpListener: FollowUpListener
+    private val followUpListener: FollowUpListener,
+    private val audioCueManager: AudioCueManager
 ) {
     private val tag = "ConversationManager"
     private val scope = CoroutineScope(Dispatchers.Main)
@@ -48,6 +50,7 @@ class ConversationManager @Inject constructor(
      */
     fun startConversationFromWakeWord() {
         Log.d(tag, "startConversationFromWakeWord invoked")
+        audioCueManager.playActivationChime()
         scope.launch {
             stateMachine.transitionTo(AssistantState.WakeDetected)
             speechTurnManager.startNewSession()
@@ -122,6 +125,7 @@ class ConversationManager @Inject constructor(
             }
 
             speechTurnManager.registerTurn(utteranceText)
+            audioCueManager.playConfirmationChime()
             stateMachine.transitionTo(AssistantState.Processing)
 
             // Deterministic offline intent parsing

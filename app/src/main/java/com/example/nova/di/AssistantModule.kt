@@ -69,7 +69,8 @@ object AssistantModule {
         ttsManager: TtsManager,
         wakeWordManager: WakeWordManager,
         speechTurnManager: SpeechTurnManager,
-        followUpListener: FollowUpListener
+        followUpListener: FollowUpListener,
+        audioCueManager: com.example.nova.audio.AudioCueManager
     ): ConversationManager {
         return ConversationManager(
             stateMachine = stateMachine,
@@ -79,7 +80,8 @@ object AssistantModule {
             ttsManager = ttsManager,
             wakeWordManager = wakeWordManager,
             speechTurnManager = speechTurnManager,
-            followUpListener = followUpListener
+            followUpListener = followUpListener,
+            audioCueManager = audioCueManager
         )
     }
 

@@ -1,10 +1,13 @@
 package com.example.nova.ui.assistant
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,18 +42,17 @@ import androidx.compose.ui.unit.sp
 import com.example.nova.assistant.AssistantState
 import com.example.nova.assistant.AssistantViewModel
 import com.example.nova.assistant.toOrbMode
-import com.example.nova.stt.ModelStatus
 import com.example.nova.ui.components.LiveTranscriptionView
 import com.example.nova.ui.components.MicActivityIndicator
-import com.example.nova.ui.components.NovaOrb
+import com.example.nova.ui.components.SiriEdgeGlow
+import com.example.nova.ui.components.SiriLiquidOrb
+import com.example.nova.ui.components.SiriResponseCard
 import com.example.nova.ui.theme.Black
 import com.example.nova.ui.theme.CyanNova
 import com.example.nova.ui.theme.ElectricBlue
-import com.example.nova.ui.theme.GlowAmber
 import com.example.nova.ui.theme.GlowRed
 import com.example.nova.ui.theme.SurfaceDark
 import com.example.nova.ui.theme.TextSecondary
-import com.example.nova.ui.theme.TextTertiary
 import com.example.nova.ui.theme.TextWhite
 
 @Composable
@@ -61,7 +64,6 @@ fun AssistantScreen(
     val state by viewModel.assistantState.collectAsState()
     val liveTranscription by viewModel.liveTranscription.collectAsState()
     val audioLevel by viewModel.audioLevel.collectAsState()
-    val modelStatus by viewModel.modelStatus.collectAsState()
 
     val orbMode = state.toOrbMode()
     val isListening = state is AssistantState.Listening ||
@@ -71,198 +73,166 @@ fun AssistantScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Black)
+            .background(Color(0xFF07070A))
             .statusBarsPadding()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {
+                    if (state !is AssistantState.Idle) {
+                        viewModel.cancel()
+                    }
+                }
+            )
     ) {
-        // TOP APP BAR
+        // 1. Siri-Style Edge Glow Ribbon (Illuminates full screen border on wake/speak)
+        SiriEdgeGlow(
+            mode = orbMode,
+            audioLevel = audioLevel
+        )
+
+        // 2. Minimal Top Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 20.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Nova Logo & Title
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(10.dp)
+                        .size(8.dp)
                         .clip(CircleShape)
-                        .background(
-                            when (modelStatus) {
-                                ModelStatus.READY -> CyanNova
-                                ModelStatus.NOT_FOUND -> GlowAmber
-                                ModelStatus.CORRUPTED -> GlowRed
-                                else -> ElectricBlue
-                            }
-                        )
+                        .background(if (isListening) CyanNova else ElectricBlue)
                 )
                 Text(
                     text = "NOVA",
                     color = TextWhite,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
+                    fontSize = 16.sp,
                     letterSpacing = 2.sp
                 )
             }
 
-            // Actions: Mic indicator & Settings
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            IconButton(
+                onClick = onNavigateToSettings,
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceDark.copy(alpha = 0.6f))
             ) {
-                IconButton(
-                    onClick = { viewModel.onOrbClicked() },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(SurfaceDark)
-                ) {
-                    Icon(
-                        imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
-                        contentDescription = "Microphone Status",
-                        tint = if (isListening) ElectricBlue else TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = onNavigateToSettings,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(SurfaceDark)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
 
-        // CENTER: Animated Glowing Orb and Prompts
+        // 3. Center Content Area (Cards, Transcription, Siri Prompts)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 24.dp)
+                .padding(top = 80.dp, bottom = 170.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            NovaOrb(
-                mode = orbMode,
-                audioLevel = audioLevel,
-                size = 280.dp,
-                onClick = { viewModel.onOrbClicked() }
-            )
-
-            Spacer(modifier = Modifier.height(36.dp))
-
-            // Assistant Status & Voice Prompts
+            // Siri Status Prompt
             AnimatedContent(
                 targetState = state,
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "StatusTextTransition"
+                label = "SiriPromptAnim"
             ) { targetState ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    when (targetState) {
-                        is AssistantState.Idle -> {
+                when (targetState) {
+                    is AssistantState.Idle -> {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Text(
-                                text = "Hey, I'm Nova",
+                                text = "What can I help you with?",
                                 color = TextWhite,
                                 fontSize = 24.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center
                             )
                             Text(
-                                text = "Say \"Hey Nova\" or tap the orb",
+                                text = "Say \"Hey Nova\" or tap the glowing orb",
                                 color = TextSecondary,
                                 fontSize = 15.sp
                             )
                         }
-                        is AssistantState.WakeDetected -> {
-                            Text(
-                                text = "Hey Nova",
-                                color = ElectricBlue,
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        is AssistantState.Listening -> {
-                            Text(
-                                text = "Listening…",
-                                color = CyanNova,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        is AssistantState.SpeechPaused -> {
-                            Text(
-                                text = "I'm listening…",
-                                color = CyanNova.copy(alpha = 0.8f),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Normal
-                            )
-                        }
-                        is AssistantState.Processing -> {
-                            Text(
-                                text = "Thinking…",
-                                color = ElectricBlue,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        is AssistantState.Speaking -> {
-                            Text(
-                                text = targetState.responseText,
-                                color = TextWhite,
-                                fontSize = 18.sp,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 24.sp
-                            )
-                        }
-                        is AssistantState.FollowUpListening -> {
-                            Text(
-                                text = "Listening for follow-up…",
-                                color = CyanNova,
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        is AssistantState.Error -> {
-                            Text(
-                                text = targetState.errorMessage,
-                                color = GlowRed,
-                                fontSize = 16.sp,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                    }
+                    is AssistantState.WakeDetected -> {
+                        Text(
+                            text = "Go ahead…",
+                            color = ElectricBlue,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    is AssistantState.Listening, is AssistantState.SpeechPaused, is AssistantState.FollowUpListening -> {
+                        Text(
+                            text = if (targetState is AssistantState.SpeechPaused) "I'm listening…" else "Listening…",
+                            color = CyanNova,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    is AssistantState.Processing -> {
+                        Text(
+                            text = "Thinking…",
+                            color = ElectricBlue,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    is AssistantState.Speaking -> {
+                        // Display Siri Interactive Response Card
+                        SiriResponseCard(spokenText = targetState.responseText)
+                    }
+                    is AssistantState.Error -> {
+                        Text(
+                            text = targetState.errorMessage,
+                            color = GlowRed,
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Real-Time Partial & Final Transcription View
+            // Real-Time Floating Partial Transcription
             LiveTranscriptionView(text = liveTranscription)
         }
 
-        // BOTTOM: Mic Activity Waveform Indicator
-        Box(
+        // 4. Bottom Siri Liquid Orb & Mic Waveform
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             MicActivityIndicator(
                 audioLevel = audioLevel,
                 isListening = isListening
+            )
+
+            // Siri Liquid Metal Bottom Orb
+            SiriLiquidOrb(
+                mode = orbMode,
+                audioLevel = audioLevel,
+                size = 140.dp,
+                onClick = { viewModel.onOrbClicked() }
             )
         }
     }
