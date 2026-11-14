@@ -49,6 +49,11 @@ class ConversationManager @Inject constructor(
      * Called when "Hey Nova" is detected (either screen on or screen off)
      */
     fun startConversationFromWakeWord() {
+        val currentState = stateMachine.currentState.value
+        if (currentState !is AssistantState.Idle) {
+            Log.d(tag, "startConversationFromWakeWord ignored: assistant is not idle ($currentState)")
+            return
+        }
         Log.d(tag, "startConversationFromWakeWord invoked")
         audioCueManager.playActivationChime()
         scope.launch {

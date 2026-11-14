@@ -125,6 +125,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        configureLockScreenFlags()
         if (intent?.getBooleanExtra("EXTRA_VOICE_TRIGGER", false) == true) {
             assistantCoordinator.onWakeWordTriggered()
         }

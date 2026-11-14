@@ -118,6 +118,17 @@ class WakeWordForegroundService : Service() {
             launch {
                 wakeWordManager.wakeWordDetected.collect {
                     Log.d(tag, "Wake word detected in foreground service! Activating assistant session...")
+                    try {
+                        val launchIntent = Intent(this@WakeWordForegroundService, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                            putExtra("EXTRA_VOICE_TRIGGER", true)
+                        }
+                        startActivity(launchIntent)
+                    } catch (e: Exception) {
+                        Log.w(tag, "Could not launch MainActivity directly from service", e)
+                    }
                     assistantCoordinator.onWakeWordTriggered()
                 }
             }
@@ -127,14 +138,16 @@ class WakeWordForegroundService : Service() {
 
     private fun acquireWakeLock() {
         try {
+            if (wakeLock?.isHeld == true) return
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "Nova::WakeWordServiceWakeLock"
             ).apply {
                 setReferenceCounted(false)
-                acquire(10 * 60 * 1000L) // 10 minutes timeout per lock acquisition, refreshed as needed
+                acquire()
             }
+            Log.d(tag, "Acquired permanent partial wake lock for continuous wake word spotting")
         } catch (e: Exception) {
             Log.e(tag, "Failed to acquire wake lock", e)
         }
